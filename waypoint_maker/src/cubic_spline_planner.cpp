@@ -1,4 +1,4 @@
-#include "../include/cubic_spline_planner.hpp"
+#include "../include/waypoint_maker/cubic_spline_planner.hpp"
 #include <vector>
 template <class T>
 ostream &operator<<(ostream &os, vector<T> V)

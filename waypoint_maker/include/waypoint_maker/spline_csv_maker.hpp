@@ -5,19 +5,12 @@
 #include "./cubic_spline_planner.hpp"
 #include <fstream>
 
-//<<====================================>>//
 
-#define VERSION 1 //예선 0 본선 1 시흥 2
 
-//<<====================================>>//
 
-#if VERSION == 1
-#define MAKEFILEPATH "/home/kuuve/catkin_ws/src/data_본선/splined.csv"
-#define EDITFILE "/home/kuuve/catkin_ws/src/data_본선/"
-#else
-#define MAKEFILEPATH "/home/kuuve/catkin_ws/src/data_시흥/splined.csv"
-#define EDITFILE "/home/kuuve/catkin_ws/src/data_시흥/"
-#endif
+#define MAKEFILEPATH "/home/kuuve/catkin_ws/src/data/splined.csv"
+#define EDITFILE "/home/kuuve/catkin_ws/src/data/"
+
 
 
 using namespace std;

@@ -9,17 +9,8 @@
 #include <cmath>
 #include <eigen3/Eigen/Dense>
 
-//<<====================================>>//
 
-#define VERSION 1 //예선 0 본선 1 시흥 2
-
-//<<====================================>>//
-
-#if VERSION == 1
-#define PATH "/home/kuuve/catkin_ws/src/data_본선/"
-#else
-#define PATH "/home/kuuve/catkin_ws/src/data_시흥/"
-#endif
+#define PATH "/home/kuuve/catkin_ws/src/data/"
 #define SCALE_FACTER 0.5
 
 using namespace std;

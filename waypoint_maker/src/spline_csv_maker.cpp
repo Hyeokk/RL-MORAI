@@ -9,8 +9,8 @@
     반복문으로 index까지 번호 부여
 */
 #include <ros/ros.h>
-#include "../include/load_global_path.hpp"
-#include "../include/spline_csv_maker.hpp"
+#include "../include/waypoint_maker/load_global_path.hpp"
+#include "../include/waypoint_maker/spline_csv_maker.hpp"
 
 int main(int argc, char **argv)
 {
