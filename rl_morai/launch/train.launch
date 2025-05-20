@@ -1,3 +1,0 @@
-<launch>
-  <node pkg="rl_morai" type="train.py" name="ddpg_trainer" output="screen" launch-prefix="python3" />
-</launch>
