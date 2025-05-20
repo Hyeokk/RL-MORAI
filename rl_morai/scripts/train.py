@@ -7,13 +7,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from models.DDPG import DDPGAgent
-from envs.morai_env import MoraiEnv
+from gym_morai.envs.morai_env import MoraiEnv
 from utils.utils import preprocess_image
 
 def main():
     env = MoraiEnv()
-    time.sleep(5.0)
-    
     obs, _ = env.reset()
     state = preprocess_image(obs)
     
@@ -28,7 +26,6 @@ def main():
     max_steps_per_episode = 1000
 
     for episode in range(num_episodes):
-        time.sleep(1.0)
         obs, _ = env.reset()
         state = agent.preprocess_image(obs).flatten()
 

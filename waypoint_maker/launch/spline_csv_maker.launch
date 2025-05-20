@@ -1,0 +1,48 @@
+<launch>
+<!-- default => 그 미션스테이트가 시작하는 점을 작성해 둘것 (스틀라인 돌리기 이전 기준)-->
+<!-- 새로운 mission state 가 추가되면 arg랑 param 추가해서 작성하고 hpp코드에도 추가해서 작성하기-->
+	<arg name="state_0" default="0"/>
+<!--	<arg name="state_1" default="1"/>
+	<arg name="state_2" default="2"/>
+	<arg name="state_3" default="3"/>
+	<arg name="state_4" default="4"/>
+	<arg name="state_5" default="5"/>
+	<arg name="state_6" default="6"/>
+	<arg name="state_7" default="90"/>
+	<arg name="state_8" default="91"/>
+	<arg name="state_9" default="142"/>
+	<arg name="state_10" default="143"/>
+	<arg name="state_11" default="144"/>
+	<arg name="state_12" default="240"/>
+	<arg name="state_13" default="241"/>
+	<arg name="state_14" default="242"/>
+	<arg name="state_15" default="1620"/>
+	<arg name="state_16" default="1738"/> -->
+							
+	
+
+<!-- -->
+	<node name="spline_csv_maker_node" pkg="waypoint_maker" type="spline_csv_maker_node" output="screen">
+		<param name="state_0" value="$(arg state_0)" />
+<!--		<param name="state_1" value="$(arg state_1)" />
+		<param name="state_2" value="$(arg state_2)" />
+		<param name="state_3" value="$(arg state_3)" />
+		<param name="state_4" value="$(arg state_4)" />
+		<param name="state_5" value="$(arg state_5)" />
+		<param name="state_6" value="$(arg state_6)" />
+		<param name="state_7" value="$(arg state_7)" />
+		<param name="state_8" value="$(arg state_8)" />
+		<param name="state_9" value="$(arg state_9)" />
+		<param name="state_10" value="$(arg state_10)" />
+		<param name="state_11" value="$(arg state_11)" />
+		<param name="state_12" value="$(arg state_12)" />
+		<param name="state_13" value="$(arg state_13)" />
+		<param name="state_14" value="$(arg state_14)" />
+		<param name="state_15" value="$(arg state_15)" />
+		<param name="state_16" value="$(arg state_16)" /> -->
+		
+
+
+	</node>
+
+</launch>

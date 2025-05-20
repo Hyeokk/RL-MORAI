@@ -6,8 +6,6 @@ from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge
 import cv2
 
-from nav_msgs.msg import Odometry  # ← 수정된 메시지 타입
-
 class MoraiSensor:
     def __init__(self):
         self.bridge = CvBridge()
@@ -16,9 +14,9 @@ class MoraiSensor:
         self.image_subscribed = False
         self.odom_subscribed = False
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
-        
+
         rospy.Subscriber('/image_jpeg/compressed', CompressedImage, self.image_callback)
-        rospy.Subscriber('/odom', Odometry, self.odom_callback)  # ← 메시지 타입 수정
+        rospy.Subscriber('/odom', Odometry, self.odom_callback)
 
     def image_callback(self, msg):
         if not self.image_subscribed:
@@ -39,17 +37,17 @@ class MoraiSensor:
         self.odom = (x, y)
 
     def preprocess_image(self, image):
-        image = cv2.resize(image, (320, 240))
+        image = cv2.resize(image, (160, 80))  # 환경과 맞춤
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        return gray[:, :, None]
+        return gray[:, :, None]  # (H, W, 1)
 
     def get_image(self):
         return self.image
 
-    def get_position(self):  # ← 이름 변경 (GPS 아님)
+    def get_position(self):
         return self.odom
 
-    def send_control(self, steering, throttle): 
+    def send_control(self, steering, throttle):
         cmd = Twist()
         cmd.linear.x = throttle
         cmd.angular.z = steering

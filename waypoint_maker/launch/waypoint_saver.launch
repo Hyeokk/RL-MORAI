@@ -1,0 +1,9 @@
+<launch>
+
+	<arg name="min_dist_" default="0.5" />
+
+	<node name="waypoint_saver_node" pkg="waypoint_maker" type="waypoint_saver_node" output="screen">
+		<param name="min_dist_" value="$(arg min_dist_)" />
+	</node>
+
+</launch>

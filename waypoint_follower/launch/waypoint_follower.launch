@@ -1,0 +1,10 @@
+<launch>
+
+
+	<arg name="current_mission_state" default="0" />
+
+	<node name="waypoint_follower_node" pkg="waypoint_follower" type="waypoint_follower_node" output="screen">
+	<param name="current_mission_state" value="$(arg current_mission_state)" />
+
+	</node>
+</launch>
