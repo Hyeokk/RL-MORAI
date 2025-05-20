@@ -2,9 +2,10 @@ import numpy as np
 import rospy
 from sensor_msgs.msg import CompressedImage
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist
+from morai_msgs.msg import CtrlCmd
 from cv_bridge import CvBridge
 import cv2
+from src.utils import Cal_CTE
 
 class MoraiSensor:
     def __init__(self):
@@ -13,7 +14,7 @@ class MoraiSensor:
         self.odom = None
         self.image_subscribed = False
         self.odom_subscribed = False
-        self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+        self.cmd_vel_pub = rospy.Publisher('/ctrl_cmd', CtrlCmd, queue_size=1)
 
         rospy.Subscriber('/image_jpeg/compressed', CompressedImage, self.image_callback)
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
@@ -29,7 +30,7 @@ class MoraiSensor:
 
     def odom_callback(self, msg):
         if not self.odom_subscribed:
-            rospy.loginfo("ODO 데이터 구독 시작: /odom")
+            rospy.loginfo("ODOM DATA: /odom")
             self.odom_subscribed = True
 
         x = msg.pose.pose.position.x
@@ -46,9 +47,26 @@ class MoraiSensor:
 
     def get_position(self):
         return self.odom
+    
+    def cal_cte(self, csv_path='data.csv'):
+        # 현재 위치 받기
+        agent_pos = self.get_position()
+        if agent_pos is None:
+            #rospy.logwarn("현재 위치 정보를 아직 수신하지 못했습니다.")
+            return None
+
+        # 중심선 불러오기
+        data, xy_path = Cal_CTE.load_centerline(csv_path)  # 또는 '/mnt/data/data.csv' (위치에 따라 조정)
+
+        # CTE 계산
+        cte = Cal_CTE.calculate_cte(agent_pos, xy_path)
+        #rospy.loginfo(f"현재 CTE: {cte:.3f}")
+
+        return cte
 
     def send_control(self, steering, throttle):
-        cmd = Twist()
-        cmd.linear.x = throttle
-        cmd.angular.z = steering
+        cmd = CtrlCmd()
+        cmd.longlCmdType= 2
+        cmd.velocity= throttle
+        cmd.steering = steering
         self.cmd_vel_pub.publish(cmd)
