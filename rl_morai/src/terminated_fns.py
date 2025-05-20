@@ -12,7 +12,7 @@ class TerminatedFns:
             # 1. CTE 체크
             cte = sensor.cal_cte()
             if cte is not None and cte > max_cte:
-                print(f"[DONE] CTE 초과: {cte:.3f} > {max_cte}")
+                #print(f"[DONE] CTE 초과: {cte:.3f} > {max_cte}")
                 return True
                 
             # 2. 속도 체크 (정지 감지)
@@ -24,7 +24,7 @@ class TerminatedFns:
                 if len(recent_velocities) == stuck_frames:
                     avg_vel = sum(recent_velocities) / stuck_frames
                     if avg_vel < min_velocity:
-                        print(f"[DONE] 정지 감지: 평균 속도 {avg_vel:.3f} < {min_velocity}")
+                        #print(f"[DONE] 정지 감지: 평균 속도 {avg_vel:.3f} < {min_velocity}")
                         return True
             
             return False
