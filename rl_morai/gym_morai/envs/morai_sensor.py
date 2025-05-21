@@ -126,6 +126,7 @@ class MoraiSensor:
         return cte
 
     def send_control(self, steering, throttle):
+        self.last_steering = steering
         cmd = CtrlCmd()
         cmd.longlCmdType= 2
         cmd.velocity= throttle

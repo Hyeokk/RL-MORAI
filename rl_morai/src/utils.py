@@ -1,22 +1,28 @@
 import os
+import csv
+import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Preprocess:
     @staticmethod
     def preprocess_image(image):
         """
-        이미지를 신경망 입력에 적합한 형태로 전처리합니다.
-        
-        Parameters:
-        - image: 입력 이미지 (HxWx1 또는 HxW)
-        
-        Returns:
-        - 전처리된 이미지 (CxHxW 형태, 값 범위 0-1)
+        이미지를 CNN 입력에 적합한 (C x H x W) 형태로 전처리하며,
+        크기를 최소 (80, 160)으로 리사이즈합니다.
         """
+        # 리사이즈 (W, H)
+        image = cv2.resize(image, (160, 80))  # 최소 안전 사이즈 보장
+
+        # 정규화
         image = image.astype(np.float32) / 255.0
-        if image.ndim == 2:  # grayscale, no channel dim
-            image = image[:, :, None]
-        image = np.transpose(image, (2, 0, 1))  # HWC -> CHW
+
+        # 채널 차원 처리
+        if image.ndim == 2:
+            image = image[:, :, None]  # H x W x 1
+
+        # HWC → CHW
+        image = np.transpose(image, (2, 0, 1))
         return image
 
 class Cal_CTE:
@@ -46,3 +52,55 @@ class Cal_CTE:
         agent_pos = np.array(agent_pos)
         distances = np.linalg.norm(path_points - agent_pos, axis=1)
         return np.min(distances)
+    
+class Plot:
+    @staticmethod
+    def save_reward_csv(reward_list, csv_path):
+        with open(csv_path, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(["Episode", "Reward"])
+            for i, r in enumerate(reward_list, start=1):
+                writer.writerow([i, r])
+
+    @staticmethod
+    def plot_rewards(reward_list, save_path=None):
+        plt.figure(figsize=(10, 5))
+        plt.plot(reward_list, label="Total Reward")
+        plt.xlabel("Episode")
+        plt.ylabel("Reward")
+        plt.title("Training Reward Curve")
+        plt.grid(True)
+        plt.legend()
+        if save_path:
+            plt.savefig(save_path)
+            plt.close()
+        else:
+            plt.show()
+
+    # ✅ 평가 보상 CSV 저장
+    @staticmethod
+    def save_eval_csv(eval_rewards, csv_path):
+        with open(csv_path, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(["Episode", "EvalReward"])
+            for i, r in eval_rewards:
+                writer.writerow([i, r])
+
+    # ✅ 평가 보상 그래프
+    @staticmethod
+    def plot_eval_rewards(eval_rewards, save_path=None):
+        episodes = [e for e, _ in eval_rewards]
+        rewards = [r for _, r in eval_rewards]
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(episodes, rewards, label="Eval Avg Reward", color='orange')
+        plt.xlabel("Episode")
+        plt.ylabel("Avg Eval Reward")
+        plt.title("Evaluation Reward Curve")
+        plt.grid(True)
+        plt.legend()
+        if save_path:
+            plt.savefig(save_path)
+            plt.close()
+        else:
+            plt.show()
