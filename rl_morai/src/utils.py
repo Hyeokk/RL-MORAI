@@ -4,54 +4,29 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-class Preprocess:
-    @staticmethod
-    def preprocess_image(image):
-        """
-        이미지를 CNN 입력에 적합한 (C x H x W) 형태로 전처리하며,
-        크기를 최소 (80, 160)으로 리사이즈합니다.
-        """
-        # 리사이즈 (W, H)
-        image = cv2.resize(image, (160, 80))  # 최소 안전 사이즈 보장
-
-        # 정규화
-        image = image.astype(np.float32) / 255.0
-
-        # 채널 차원 처리
-        if image.ndim == 2:
-            image = image[:, :, None]  # H x W x 1
-
-        # HWC → CHW
-        image = np.transpose(image, (2, 0, 1))
-        return image
-
 class Cal_CTE:
     @staticmethod
-    def load_centerline(csv_filename='data.csv'):
-        """
-        data.csv에서 x, y만 추출
-        """
-        data_dir = "/home/kuuve/catkin_ws/src/data"
-        csv_path = os.path.join(data_dir, csv_filename)
-
-        if not os.path.exists(csv_path):
-            raise FileNotFoundError(f"CSV 파일 없음: {csv_path}")
-
-        # 전체 열을 불러오되, x: 1번 열, y: 2번 열만 슬라이싱
-        data = np.loadtxt(csv_path, delimiter=',', skiprows=1, usecols=(1, 2))
-        return data  # (N, 2) 크기의 numpy 배열: [[x1, y1], [x2, y2], ...]
+    def load_centerline(csv_path):
+        x_list = []
+        y_list = []
+        with open(csv_path, newline='') as csvfile:
+            reader = csv.reader(csvfile)
+            next(reader)  # 헤더 스킵
+            for row in reader:
+                x = float(row[1])  # 2열: x
+                y = float(row[2])  # 3열: y
+                x_list.append(x)
+                y_list.append(y)
+        return np.array(list(zip(x_list, y_list)))  # (N, 2) array
 
     @staticmethod
     def calculate_cte(agent_pos, path_points):
-        """
-        차량 위치와 경로 점들 간의 최소 거리 (CTE) 계산
-        """
-        if agent_pos is None or len(path_points) == 0:
-            return None
-
-        agent_pos = np.array(agent_pos)
+        agent_pos = np.array(agent_pos)  # tuple -> ndarray
         distances = np.linalg.norm(path_points - agent_pos, axis=1)
-        return np.min(distances)
+        min_index = np.argmin(distances)
+        closest_point = path_points[min_index]
+        cte = np.linalg.norm(agent_pos - closest_point)
+        return cte
     
 class Plot:
     @staticmethod

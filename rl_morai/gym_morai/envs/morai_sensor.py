@@ -6,7 +6,6 @@ from morai_msgs.msg import CtrlCmd
 from cv_bridge import CvBridge
 import cv2
 import time
-from collections import deque
 from src.utils import Cal_CTE
 
 class MoraiSensor:
@@ -18,10 +17,10 @@ class MoraiSensor:
         self.odom_subscribed = False
         self.cmd_vel_pub = rospy.Publisher('/ctrl_cmd', CtrlCmd, queue_size=1)
 
-        # 속도 계산을 위한 변수 추가
-        self.position_history = deque(maxlen=10)  # 최근 10개 위치 저장
-        self.timestamp_history = deque(maxlen=10)  # 위치에 대응하는 타임스탬프
-        self.last_velocity = None  # 마지막으로 계산된 속도
+        # 속도 계산을 위한 간단한 변수들 추가
+        self.last_position = None
+        self.last_time = None
+        self.current_velocity = 0.0
 
         rospy.Subscriber('/image_jpeg/compressed', CompressedImage, self.image_callback)
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
@@ -31,9 +30,24 @@ class MoraiSensor:
             rospy.loginfo("CAMERA INPUT : /image_jpeg/compressed")
             self.image_subscribed = True
 
-        np_arr = np.frombuffer(msg.data, np.uint8)
-        image = self.bridge.compressed_imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        self.image = self.preprocess_image(image)
+        try:
+            np_arr = np.frombuffer(msg.data, np.uint8)
+            image = self.bridge.compressed_imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            self.image = self.preprocess_image(image)
+        except Exception as e:
+            rospy.logerr(f"Image processing error: {e}")
+            self.image = None
+
+    def preprocess_image(self, image):
+        if image is None:
+            return None
+            
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) # RGB을 Grayscale로 변환
+        resized = cv2.resize(gray, (160, 120), interpolation=cv2.INTER_AREA)
+        
+        normalized = resized.astype(np.float32) / 255.0 # CNN 입력 데이터로 변환
+        
+        return normalized[:, :, np.newaxis]
 
     def odom_callback(self, msg):
         if not self.odom_subscribed:
@@ -43,92 +57,53 @@ class MoraiSensor:
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         self.odom = (x, y)
-        
-        # 위치와 시간 기록
+
+        # 간단한 속도 계산
         current_time = rospy.Time.now().to_sec()
-        self.position_history.append((x, y))
-        self.timestamp_history.append(current_time)
+        current_position = (x, y)
         
-        # 속도 계산 (최소 2개 이상의 데이터가 있을 때)
-        if len(self.position_history) >= 2:
-            self._calculate_velocity()
+        if self.last_position is not None and self.last_time is not None:
+            dt = current_time - self.last_time
+            if dt > 0.01:  # 10ms 이상일 때만 계산
+                dx = current_position[0] - self.last_position[0]
+                dy = current_position[1] - self.last_position[1]
+                distance = np.sqrt(dx**2 + dy**2)
+                self.current_velocity = distance / dt
+                
+                # 속도 제한 (비현실적인 값 방지)
+                if self.current_velocity > 50.0:
+                    self.current_velocity = 50.0
+        
+        self.last_position = current_position
+        self.last_time = current_time
 
-    def _calculate_velocity(self):
-        """
-        최근 위치 데이터를 사용하여 속도 계산
-        """
-        # 최신 위치와 시간
-        latest_pos = self.position_history[-1]
-        latest_time = self.timestamp_history[-1]
-        
-        # 이전 위치와 시간
-        prev_pos = self.position_history[-2]
-        prev_time = self.timestamp_history[-2]
-        
-        # 시간 간격
-        dt = latest_time - prev_time
-        
-        # 시간 간격이 너무 작으면 오차가 커질 수 있음
-        if dt < 0.01:  # 10ms 미만이면 계산 생략
-            return
-        
-        # 거리 계산
-        dx = latest_pos[0] - prev_pos[0]
-        dy = latest_pos[1] - prev_pos[1]
-        distance = np.sqrt(dx**2 + dy**2)
-        
-        # 속도 계산 (m/s)
-        self.last_velocity = distance / dt
-        
-        # 노이즈 필터링 (갑작스러운 변화 방지)
-        if self.last_velocity > 50.0:  # 비현실적으로 큰 속도 제한
-            self.last_velocity = 50.0
-            
     def get_velocity(self):
-        """
-        계산된 속도 반환
-        """
-        return self.last_velocity
+        """현재 속도 반환 (m/s)"""
+        return self.current_velocity if self.current_velocity is not None else 0.0
 
-    def preprocess_image(self, image):
-        image = cv2.resize(image, (160, 80))  # 환경과 맞춤
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        return gray[:, :, None]  # (H, W, 1)
+    def cal_cte(self, csv_path='/home/kuuve/catkin_ws/src/data/data.csv'):
+        agent_pos = self.get_position()
+        if agent_pos is None:
+            rospy.logwarn("Agent position not available")
+            return None
+
+        # 경로 불러오기
+        xy_path = Cal_CTE.load_centerline(csv_path)
+        
+        # CTE 계산
+        cte = Cal_CTE.calculate_cte(agent_pos, xy_path)
+        
+        return cte
 
     def get_image(self):
         return self.image
 
     def get_position(self):
         return self.odom
-    
-    def wait_for_valid_position(self, timeout=2.0):
-        """
-        최신 position 수신 전까지 최대 timeout초 대기
-        """
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            pos = self.get_position()
-            if pos is not None and isinstance(pos, (list, tuple, np.ndarray)):
-                return pos
-            time.sleep(0.05)
-        #print("[WARN] 유효한 position 수신 실패")
-        return None
-
-    def cal_cte(self, csv_path='data.csv'):
-        #agent_pos = self.get_position()  # UTM 좌표 [x, y]
-        agent_pos = self.wait_for_valid_position()
-        if agent_pos is None:
-            return None
-
-        xy_path = Cal_CTE.load_centerline(csv_path)
-        cte = Cal_CTE.calculate_cte(agent_pos, xy_path)
-        #print("CTE:", cte)
-        return cte
 
     def send_control(self, steering, throttle):
-        self.last_steering = steering
         cmd = CtrlCmd()
-        cmd.longlCmdType= 2
-        cmd.velocity= throttle
+        cmd.longlCmdType = 2
+        cmd.velocity = throttle
         cmd.steering = steering
         self.cmd_vel_pub.publish(cmd)
