@@ -82,7 +82,7 @@ def main():
             if done:
                 break
 
-        print(f"에피소드 {episode+1}: 스텝={episode_steps}, 보상={total_reward:.2f}")
+        print(f"Episode : {episode+1}, Steps : {episode_steps}, Rewards : {total_reward:.2f}")
         
         # 100 에피소드마다 저장
         if (episode + 1) % 100 == 0:

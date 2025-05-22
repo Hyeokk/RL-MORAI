@@ -14,7 +14,7 @@ class TerminatedFns:
             
             # 1. 최대 스텝 수 체크
             if step_counter[0] >= max_steps:
-                print(f"[DONE] 최대 스텝 수 도달: {step_counter[0]} >= {max_steps}")
+                #print(f"[DONE] 최대 스텝 수 도달: {step_counter[0]} >= {max_steps}")
                 step_counter[0] = 0  # 리셋
                 return True
                 
@@ -24,7 +24,7 @@ class TerminatedFns:
                 return False
                 
             if cte > max_cte:
-                print(f"[DONE] 차선 이탈: CTE {cte:.2f} > {max_cte}")
+                #print(f"[DONE] 차선 이탈: CTE {cte:.2f} > {max_cte}")
                 step_counter[0] = 0  # 리셋
                 return True
                 
@@ -37,7 +37,7 @@ class TerminatedFns:
                 if len(recent_velocities) == stuck_frames:
                     avg_vel = sum(recent_velocities) / stuck_frames
                     if avg_vel < min_velocity:
-                        print(f"[DONE] 정지 감지: 평균 속도 {avg_vel:.3f} < {min_velocity}")
+                        #print(f"[DONE] 정지 감지: 평균 속도 {avg_vel:.3f} < {min_velocity}")
                         step_counter[0] = 0  # 리셋
                         return True
             
