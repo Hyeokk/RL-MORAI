@@ -10,6 +10,8 @@ from gym_morai.envs.morai_env import MoraiEnv
 from src.reward_fns import RewardFns
 from src.terminated_fns import TerminatedFns
 from models.SAC import SACAgent
+from src.reward_fns import CurriculumReward
+from src.terminated_fns import CurriculumTermination
 
 # 설정
 SAVE_DIR = "/home/kuuve/catkin_ws/src/pt/"
@@ -35,7 +37,11 @@ def main():
     env = MoraiEnv(action_bounds=action_bounds)
     
     sensor = env.sensor
-    env.set_reward_fn(RewardFns.lanefollow_cte_reward(sensor))
+    #env.set_reward_fn(RewardFns.lanefollow_cte_reward(sensor))
+    #env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.8))
+
+    episode_counter = [0]
+    env.set_reward_fn(RewardFns.adaptive_speed_lanefollow_reward(sensor))
     env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.8))
 
     # 초기 관측
@@ -47,14 +53,16 @@ def main():
     # SAC 에이전트 생성
     agent = SACAgent(obs.shape, 2, action_bounds)
     
-    num_episodes = 2000
+    num_episodes = 1500
     max_steps_per_episode = 10000
 
     # 학습 루프
     for episode in range(num_episodes):
         if stop_flag:
             break
-            
+        
+        episode_counter[0] = episode
+
         obs, _ = env.reset()
         if obs is None:
             continue
@@ -83,6 +91,11 @@ def main():
                 break
 
         print(f"Episode : {episode+1}, Steps : {episode_steps}, Rewards : {total_reward:.2f}")
+
+        if episode_steps < 20:
+            if agent.replay_buffer.size() > 2000:
+                agent.replay_buffer.clear_bad_patterns(threshold_reward=5.0)
+                print(f"[INFO] 버퍼 정리 완료")
         
         # 100 에피소드마다 저장
         if (episode + 1) % 100 == 0:

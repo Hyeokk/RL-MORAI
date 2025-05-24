@@ -7,11 +7,24 @@ import os
 from collections import deque
 
 # === 네트워크 정의 ===
-class CNNEncoder(nn.Module):
+# 옵션 1: 공간 정보 보존하는 CNN
+class LaneAwareCNNEncoder(nn.Module):
     def __init__(self, input_shape, output_dim):
         super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2),  # 🔧 1채널로 고정
+        
+        # 🔥 차선 검출을 위한 전용 브랜치
+        self.lane_branch = nn.Sequential(
+            nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1),  # 공간 해상도 유지
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 16, kernel_size=1),  # 1x1 conv로 차원 축소
+            nn.ReLU()
+        )
+        
+        # 기존 feature extraction 브랜치
+        self.feature_branch = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2),
             nn.ReLU(),
             nn.BatchNorm2d(32),
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
@@ -20,14 +33,141 @@ class CNNEncoder(nn.Module):
             nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
             nn.ReLU()
         )
+        
+        # 공간 풀링 (위치 정보 유지)
+        self.spatial_pool = nn.AdaptiveAvgPool2d((4, 6))  # 4x6 그리드 유지
+        
+        # 차원 계산
+        self.lane_flatten_dim = self._get_lane_flatten_dim(input_shape)
+        self.feature_flatten_dim = self._get_feature_flatten_dim(input_shape)
+        self.spatial_dim = 16 * 4 * 6  # lane_branch 출력 크기
+        
+        # 융합 레이어
+        total_dim = self.feature_flatten_dim + self.spatial_dim
+        self.fusion_fc = nn.Sequential(
+            nn.Linear(total_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, output_dim)
+        )
+
+    def _get_lane_flatten_dim(self, input_shape):
+        with torch.no_grad():
+            x = torch.zeros(1, 1, input_shape[0], input_shape[1])
+            x = self.lane_branch(x)
+            x = self.spatial_pool(x)
+            return int(np.prod(x.size()))
+
+    def _get_feature_flatten_dim(self, input_shape):
+        with torch.no_grad():
+            x = torch.zeros(1, 1, input_shape[0], input_shape[1])
+            x = self.feature_branch(x)
+            return int(np.prod(x.size()))
+
+    def forward(self, x):
+        # 차선 특화 특징 (공간 정보 유지)
+        lane_features = self.lane_branch(x)
+        lane_features = self.spatial_pool(lane_features)
+        lane_features = torch.flatten(lane_features, start_dim=1)
+        
+        # 일반 특징
+        general_features = self.feature_branch(x)
+        general_features = torch.flatten(general_features, start_dim=1)
+        
+        # 특징 융합
+        combined_features = torch.cat([general_features, lane_features], dim=1)
+        return self.fusion_fc(combined_features)
+
+# 옵션 2: 어텐션 메커니즘 추가
+class AttentionCNNEncoder(nn.Module):
+    def __init__(self, input_shape, output_dim):
+        super().__init__()
+        
+        # 기본 CNN
+        self.backbone = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(32),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU()
+        )
+        
+        # 🔥 공간 어텐션 (차선에 집중)
+        self.spatial_attention = nn.Sequential(
+            nn.Conv2d(64, 16, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 1, kernel_size=1),
+            nn.Sigmoid()  # 0~1 가중치
+        )
+        
+        # 채널 어텐션
+        self.channel_attention = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(64, 16, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 64, kernel_size=1),
+            nn.Sigmoid()
+        )
+        
         self.flatten_dim = self._get_flatten_dim(input_shape)
         self.fc = nn.Linear(self.flatten_dim, output_dim)
 
     def _get_flatten_dim(self, input_shape):
         with torch.no_grad():
-            x = torch.zeros(1, 1, input_shape[0], input_shape[1])  # 🔧 (1, 1, H, W)
-            x = self.conv(x)
+            x = torch.zeros(1, 1, input_shape[0], input_shape[1])
+            x = self.backbone(x)
             return int(np.prod(x.size()))
+
+    def forward(self, x):
+        # 백본 특징 추출
+        features = self.backbone(x)
+        
+        # 어텐션 적용
+        spatial_att = self.spatial_attention(features)
+        channel_att = self.channel_attention(features)
+        
+        # 어텐션 적용된 특징
+        attended_features = features * spatial_att * channel_att
+        
+        # 플래튼 및 출력
+        attended_features = torch.flatten(attended_features, start_dim=1)
+        return self.fc(attended_features)
+
+# 옵션 3: 단순 개선 버전 (가장 실용적)
+class CNNEncoder(nn.Module):
+    def __init__(self, input_shape, output_dim):
+        super().__init__()
+        
+        # 🔥 더 작은 stride로 공간 정보 보존
+        self.conv = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=5, stride=1, padding=2),  # stride 2→1
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),  # 명시적 풀링
+            nn.BatchNorm2d(32),
+            
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # stride 2→1
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.BatchNorm2d(64),
+            
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),  # 더 많은 채널
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.BatchNorm2d(128),
+            
+            # 🔥 Global Average Pooling (위치 정보 일부 보존)
+            nn.AdaptiveAvgPool2d((4, 4))  # 4x4 그리드 유지
+        )
+        
+        # 4x4x128 = 2048
+        self.fc = nn.Sequential(
+            nn.Linear(128 * 4 * 4, 256),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(256, output_dim)
+        )
 
     def forward(self, x):
         x = self.conv(x)
@@ -82,18 +222,21 @@ class QNetwork(nn.Module):
 
 # === 리플레이 버퍼 ===
 class PrioritizedReplayBuffer:
-    def __init__(self, max_size=200000, alpha=0.4, beta=0.6):
+    def __init__(self, max_size=200000, alpha=0.6, beta=0.4):
         self.buffer = deque(maxlen=max_size)
         self.priorities = deque(maxlen=max_size)
         self.alpha = alpha
         self.beta = beta
         self.max_priority = 1.0
+        self.episode_boundaries = [] #episode 길이 추적 (추가)
         
     def add(self, transition, priority=None):
         if priority is None:
             priority = self.max_priority
+
         self.buffer.append(transition)
-        self.priorities.append(priority ** self.alpha)
+        self.priorities.append(priority ** self.alpha) #짧은 에피소드도 같은 우선순위로 학습하게 됨
+
 
     def sample(self, batch_size):
         if len(self.buffer) < batch_size:
@@ -117,6 +260,18 @@ class PrioritizedReplayBuffer:
             self.priorities[idx] = priority ** self.alpha
             self.max_priority = max(self.max_priority, priority)
 
+    def clear_bad_patterns(self, threshold_reward=-1.0): #낮은 보상 경험 제거 (추가)
+        new_buffer = deque(maxlen=self.buffer.maxlen)
+        new_priorities = deque(maxlen=self.priorities.maxlen)
+        
+        for i, transition in enumerate(self.buffer):
+            if len(transition) >= 3 and transition[2] > threshold_reward:  # reward > threshold
+                new_buffer.append(transition)
+                new_priorities.append(self.priorities[i])
+        
+        self.buffer = new_buffer
+        self.priorities = new_priorities
+
     def size(self):
         return len(self.buffer)
 
@@ -125,13 +280,15 @@ class SACAgent:
     def __init__(self, input_shape, action_dim, action_bounds):
         # 기본 설정
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.gamma = 0.99
-        self.tau = 0.001
+        self.gamma = 0.995
+        self.tau = 0.01
         self.batch_size = 128
         self.random_steps = 5000
-        self.exploration_noise = 0.1
-        self.noise_decay = 0.9999
         
+        self.current_episode_steps = 0
+        self.total_episodes = 0  
+        self.short_episode_count = 0
+
         # 네트워크 초기화
         feature_dim = 128
         self.encoder = CNNEncoder(input_shape, feature_dim).to(self.device)
@@ -156,7 +313,8 @@ class SACAgent:
         self.critic2_opt = optim.Adam(self.critic2.parameters(), lr=self.critic_lr)  # 🔧 오타 수정
 
         # 자동 엔트로피 조정
-        self.target_entropy = -action_dim
+        #self.target_entropy = -action_dim
+        self.target_entropy = -0.2 #엔트로피를 높게하여 다양한 행동 시도
         self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
         self.alpha = self.log_alpha.exp()
         self.alpha_optimizer = optim.Adam([self.log_alpha], lr=lr)
@@ -192,10 +350,6 @@ class SACAgent:
                 action, _ = self.actor.sample(feature)
                 action = action.cpu().numpy()[0]
                 
-                # 탐색 노이즈 추가
-                noise_scale = self.exploration_noise * (self.noise_decay ** self.training_step)
-                noise = np.random.normal(0, noise_scale, size=self.action_dim)
-                action = np.clip(action + noise, -1, 1)
                 self.training_step += 1
             else:
                 mean, _ = self.actor(feature)
@@ -212,7 +366,26 @@ class SACAgent:
         return np.array(scaled, dtype=np.float32)
 
     def store(self, transition):
-        self.replay_buffer.add(transition)
+        #self.replay_buffer.add(transition)
+        obs, action, reward, next_obs, done = transition
+        
+        self.current_episode_steps += 1
+
+        if done:
+            self.total_episodes += 1
+            
+            # 짧은 에피소드 감지
+            if self.current_episode_steps < 25:
+                reduced_priority = self.replay_buffer.max_priority * 0.3
+                self.replay_buffer.add(transition, priority=reduced_priority)
+                
+                self.short_episode_count += 1
+            else:
+                self.replay_buffer.add(transition)
+            
+            self.current_episode_steps = 0
+        else:
+            self.replay_buffer.add(transition)
 
     def train(self):
         if self.replay_buffer.size() < 1000:
@@ -296,7 +469,11 @@ class SACAgent:
         torch.save(self.critic2.state_dict(), os.path.join(save_path, "sac_critic2.pt"))
 
     def load_model(self, load_path):
-        self.encoder.load_state_dict(torch.load(os.path.join(load_path, "sac_encoder.pt")))
-        self.actor.load_state_dict(torch.load(os.path.join(load_path, "sac_actor.pt")))
-        self.critic1.load_state_dict(torch.load(os.path.join(load_path, "sac_critic1.pt")))
-        self.critic2.load_state_dict(torch.load(os.path.join(load_path, "sac_critic2.pt")))
+        #self.encoder.load_state_dict(torch.load(os.path.join(load_path, "sac_encoder.pt")))
+        # self.actor.load_state_dict(torch.load(os.path.join(load_path, "sac_actor.pt")))
+        # self.critic1.load_state_dict(torch.load(os.path.join(load_path, "sac_critic1.pt")))
+        # self.critic2.load_state_dict(torch.load(os.path.join(load_path, "sac_critic2.pt")))
+        self.encoder.load_state_dict(torch.load(os.path.join(load_path, "sac_encoder.pt"), weights_only=True))
+        self.actor.load_state_dict(torch.load(os.path.join(load_path, "sac_actor.pt"), weights_only=True))
+        self.critic1.load_state_dict(torch.load(os.path.join(load_path, "sac_critic1.pt"), weights_only=True))
+        self.critic2.load_state_dict(torch.load(os.path.join(load_path, "sac_critic2.pt"), weights_only=True))

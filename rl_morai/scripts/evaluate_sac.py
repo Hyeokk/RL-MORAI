@@ -1,15 +1,29 @@
 import sys
 import os
 import numpy as np
+import signal
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from gym_morai.envs.morai_env import MoraiEnv
+from src.reward_fns import RewardFns
+from src.terminated_fns import TerminatedFns
 from models.SAC import SACAgent
 
+# 종료 플래그
+stop_flag = False
+def signal_handler(sig, frame):
+    global stop_flag
+    stop_flag = True
+signal.signal(signal.SIGINT, signal_handler)
+
 def main():
+    global stop_flag
     # 환경 설정
     action_bounds = [(-0.7, 0.7), (10.0, 30.0)]
     env = MoraiEnv(action_bounds=action_bounds)
+    sensor = env.sensor
+    env.set_reward_fn(RewardFns.adaptive_speed_lanefollow_reward(sensor))
+    env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.8))
     
     # 초기 관측
     obs, _ = env.reset()
@@ -24,6 +38,8 @@ def main():
     
     # 평가 실행
     for episode in range(5):
+        if stop_flag:
+            break
         obs, _ = env.reset()
         if obs is None:
             continue
@@ -32,6 +48,9 @@ def main():
         steps = 0
         
         for step in range(1000):
+            if stop_flag:
+                break
+            
             action = agent.get_action(obs, training=False)
             obs, reward, done, _, _ = env.step(action)
             
