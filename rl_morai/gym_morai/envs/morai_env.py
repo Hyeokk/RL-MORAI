@@ -71,7 +71,7 @@ class MoraiEnv(gym.Env):
                 # 최초 1회: i → q
                 subprocess.run(['xdotool', 'search', '--name', 'Simulator', 
                                'windowactivate', '--sync', 'key', 'i'], check=True)
-                time.sleep(0.1)
+                time.sleep(0.3)
                 subprocess.run(['xdotool', 'search', '--name', 'Simulator', 
                                'windowactivate', '--sync', 'key', 'q'], check=True)
                 self._first_reset = False
@@ -79,10 +79,10 @@ class MoraiEnv(gym.Env):
                 # 이후: q → i → q
                 subprocess.run(['xdotool', 'search', '--name', 'Simulator', 
                                'windowactivate', '--sync', 'key', 'q'], check=True)
-                time.sleep(0.1)
+                time.sleep(0.3)
                 subprocess.run(['xdotool', 'search', '--name', 'Simulator', 
                                'windowactivate', '--sync', 'key', 'i'], check=True)
-                time.sleep(0.1)
+                time.sleep(0.3)
                 subprocess.run(['xdotool', 'search', '--name', 'Simulator', 
                                'windowactivate', '--sync', 'key', 'q'], check=True)
         except subprocess.CalledProcessError as e:
