@@ -6,173 +6,87 @@ import torch.optim as optim
 import os
 from collections import deque
 
-# === 네트워크 정의 ===
-# 옵션 1: 공간 정보 보존하는 CNN
-class LaneAwareCNNEncoder(nn.Module):
-    def __init__(self, input_shape, output_dim):
+class JetsonNanoLaneCNN(nn.Module):
+    """Jetson Nano 최적화 초경량 차선 검출 CNN"""
+    def __init__(self, input_shape=(120, 160), output_dim=128, roi_crop_ratio=0.3):
         super().__init__()
         
-        # 🔥 차선 검출을 위한 전용 브랜치
-        self.lane_branch = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1),  # 공간 해상도 유지
-            nn.ReLU(),
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(32, 16, kernel_size=1),  # 1x1 conv로 차원 축소
-            nn.ReLU()
+        self.roi_crop_ratio = roi_crop_ratio
+        self.roi_height = int(input_shape[0] * (1 - roi_crop_ratio))  # 84
+        self.roi_width = input_shape[1]  # 160
+        
+        # 극도로 경량화된 백본 (MobileNet 스타일)
+        self.efficient_backbone = nn.Sequential(
+            # 1단계: 최소한의 특징 추출
+            nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1),  # 84x160 → 42x80
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(16),
+            
+            # 2단계: Depthwise Separable Conv (MobileNet 핵심)
+            self._depthwise_separable_conv(16, 32, stride=2),  # 42x80 → 21x40
+            self._depthwise_separable_conv(32, 32, stride=1),  # 크기 유지
+            
+            # 3단계: 최종 특징 (채널 수 최소화)
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),  # 21x40 → 11x20
+            nn.ReLU(inplace=True),
+            nn.BatchNorm2d(32)
         )
         
-        # 기존 feature extraction 브랜치
-        self.feature_branch = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2),
-            nn.ReLU(),
-            nn.BatchNorm2d(32),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.BatchNorm2d(64),
-            nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
-            nn.ReLU()
-        )
-        
-        # 공간 풀링 (위치 정보 유지)
-        self.spatial_pool = nn.AdaptiveAvgPool2d((4, 6))  # 4x6 그리드 유지
-        
-        # 차원 계산
-        self.lane_flatten_dim = self._get_lane_flatten_dim(input_shape)
-        self.feature_flatten_dim = self._get_feature_flatten_dim(input_shape)
-        self.spatial_dim = 16 * 4 * 6  # lane_branch 출력 크기
-        
-        # 융합 레이어
-        total_dim = self.feature_flatten_dim + self.spatial_dim
-        self.fusion_fc = nn.Sequential(
-            nn.Linear(total_dim, 256),
-            nn.ReLU(),
-            nn.Linear(256, output_dim)
-        )
-
-    def _get_lane_flatten_dim(self, input_shape):
-        with torch.no_grad():
-            x = torch.zeros(1, 1, input_shape[0], input_shape[1])
-            x = self.lane_branch(x)
-            x = self.spatial_pool(x)
-            return int(np.prod(x.size()))
-
-    def _get_feature_flatten_dim(self, input_shape):
-        with torch.no_grad():
-            x = torch.zeros(1, 1, input_shape[0], input_shape[1])
-            x = self.feature_branch(x)
-            return int(np.prod(x.size()))
-
-    def forward(self, x):
-        # 차선 특화 특징 (공간 정보 유지)
-        lane_features = self.lane_branch(x)
-        lane_features = self.spatial_pool(lane_features)
-        lane_features = torch.flatten(lane_features, start_dim=1)
-        
-        # 일반 특징
-        general_features = self.feature_branch(x)
-        general_features = torch.flatten(general_features, start_dim=1)
-        
-        # 특징 융합
-        combined_features = torch.cat([general_features, lane_features], dim=1)
-        return self.fusion_fc(combined_features)
-
-# 옵션 2: 어텐션 메커니즘 추가
-class AttentionCNNEncoder(nn.Module):
-    def __init__(self, input_shape, output_dim):
-        super().__init__()
-        
-        # 기본 CNN
-        self.backbone = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2),
-            nn.ReLU(),
-            nn.BatchNorm2d(32),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.BatchNorm2d(64),
-            nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
-            nn.ReLU()
-        )
-        
-        # 🔥 공간 어텐션 (차선에 집중)
-        self.spatial_attention = nn.Sequential(
-            nn.Conv2d(64, 16, kernel_size=1),
-            nn.ReLU(),
-            nn.Conv2d(16, 1, kernel_size=1),
-            nn.Sigmoid()  # 0~1 가중치
-        )
-        
-        # 채널 어텐션
-        self.channel_attention = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(64, 16, kernel_size=1),
-            nn.ReLU(),
-            nn.Conv2d(16, 64, kernel_size=1),
+        # 단일 경량 어텐션 (가장 중요한 것만)
+        self.lane_attention = nn.Sequential(
+            # 수직 차선 검출에만 집중
+            nn.Conv2d(32, 8, kernel_size=(5, 1), padding=(2, 0)),  # 세로 필터
+            nn.ReLU(inplace=True),
+            nn.Conv2d(8, 1, kernel_size=1),
             nn.Sigmoid()
         )
         
-        self.flatten_dim = self._get_flatten_dim(input_shape)
-        self.fc = nn.Linear(self.flatten_dim, output_dim)
-
-    def _get_flatten_dim(self, input_shape):
-        with torch.no_grad():
-            x = torch.zeros(1, 1, input_shape[0], input_shape[1])
-            x = self.backbone(x)
-            return int(np.prod(x.size()))
-
-    def forward(self, x):
-        # 백본 특징 추출
-        features = self.backbone(x)
+        # 글로벌 평균 풀링 (FC 레이어 최소화)
+        self.global_pool = nn.AdaptiveAvgPool2d(1)
         
-        # 어텐션 적용
-        spatial_att = self.spatial_attention(features)
-        channel_att = self.channel_attention(features)
-        
-        # 어텐션 적용된 특징
-        attended_features = features * spatial_att * channel_att
-        
-        # 플래튼 및 출력
-        attended_features = torch.flatten(attended_features, start_dim=1)
-        return self.fc(attended_features)
-
-# 옵션 3: 단순 개선 버전 (가장 실용적)
-class CNNEncoder(nn.Module):
-    def __init__(self, input_shape, output_dim):
-        super().__init__()
-        
-        # 🔥 더 작은 stride로 공간 정보 보존
-        self.conv = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=5, stride=1, padding=2),  # stride 2→1
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2),  # 명시적 풀링
-            nn.BatchNorm2d(32),
-            
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # stride 2→1
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2),
-            nn.BatchNorm2d(64),
-            
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),  # 더 많은 채널
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2),
-            nn.BatchNorm2d(128),
-            
-            # 🔥 Global Average Pooling (위치 정보 일부 보존)
-            nn.AdaptiveAvgPool2d((4, 4))  # 4x4 그리드 유지
-        )
-        
-        # 4x4x128 = 2048
-        self.fc = nn.Sequential(
-            nn.Linear(128 * 4 * 4, 256),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(256, output_dim)
+        # 최소한의 출력 레이어
+        self.output_fc = nn.Sequential(
+            nn.Linear(32, output_dim),
+            nn.ReLU(inplace=True)
         )
 
+    def _depthwise_separable_conv(self, in_channels, out_channels, stride=1):
+        """MobileNet의 핵심: Depthwise Separable Convolution"""
+        return nn.Sequential(
+            # Depthwise: 각 채널별로 별도 컨볼루션
+            nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=stride, 
+                     padding=1, groups=in_channels, bias=False),
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(inplace=True),
+            
+            # Pointwise: 1x1 컨볼루션으로 채널 믹싱
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+
+    def apply_roi(self, x):
+        """ROI 적용 (상단 30% 제거)"""
+        crop_height = int(x.size(2) * self.roi_crop_ratio)
+        return x[:, :, crop_height:, :]
+
     def forward(self, x):
-        x = self.conv(x)
-        x = torch.flatten(x, start_dim=1)
-        return self.fc(x)
+        # 1. ROI 적용
+        roi_x = self.apply_roi(x)  # (B, 1, 84, 160)
+        
+        # 2. 경량 백본으로 특징 추출
+        features = self.efficient_backbone(roi_x)  # (B, 32, 11, 20)
+        
+        # 3. 간단한 어텐션 적용
+        attention = self.lane_attention(features)  # (B, 1, 11, 20)
+        attended_features = features * attention
+        
+        # 4. 글로벌 풀링 및 출력
+        pooled = self.global_pool(attended_features)  # (B, 32, 1, 1)
+        flattened = pooled.view(pooled.size(0), -1)   # (B, 32)
+        output = self.output_fc(flattened)            # (B, output_dim)
+        
+        return output
 
 class GaussianPolicy(nn.Module):
     def __init__(self, feature_dim, action_dim, hidden_dim=256):
@@ -291,12 +205,12 @@ class SACAgent:
 
         # 네트워크 초기화
         feature_dim = 128
-        self.encoder = CNNEncoder(input_shape, feature_dim).to(self.device)
-        self.actor = GaussianPolicy(feature_dim, action_dim).to(self.device)
-        self.critic1 = QNetwork(feature_dim, action_dim).to(self.device)
-        self.critic2 = QNetwork(feature_dim, action_dim).to(self.device)
-        self.target_critic1 = QNetwork(feature_dim, action_dim).to(self.device)
-        self.target_critic2 = QNetwork(feature_dim, action_dim).to(self.device)
+        self.encoder = JetsonNanoLaneCNN(input_shape, feature_dim).to(self.device)
+        self.actor = GaussianPolicy(feature_dim + 2, action_dim).to(self.device)
+        self.critic1 = QNetwork(feature_dim + 2, action_dim).to(self.device)
+        self.critic2 = QNetwork(feature_dim + 2, action_dim).to(self.device)
+        self.target_critic1 = QNetwork(feature_dim + 2, action_dim).to(self.device)
+        self.target_critic2 = QNetwork(feature_dim + 2, action_dim).to(self.device)
 
         # 타겟 네트워크 초기화
         self.target_critic1.load_state_dict(self.critic1.state_dict())
@@ -304,9 +218,9 @@ class SACAgent:
 
         # 옵티마이저
         lr = 3e-4
-        self.actor_lr = 1e-4
-        self.critic_lr = 3e-4
-        self.encoder_lr = 1e-4
+        self.actor_lr = 1e-5
+        self.critic_lr = 3e-5
+        self.encoder_lr = 1e-5
         self.encoder_opt = optim.Adam(self.encoder.parameters(), lr=self.encoder_lr)
         self.actor_opt = optim.Adam(self.actor.parameters(), lr=self.actor_lr)
         self.critic1_opt = optim.Adam(self.critic1.parameters(), lr=self.critic_lr)
@@ -314,7 +228,7 @@ class SACAgent:
 
         # 자동 엔트로피 조정
         #self.target_entropy = -action_dim
-        self.target_entropy = -0.2 #엔트로피를 높게하여 다양한 행동 시도
+        self.target_entropy = -np.prod(action_dim).item() #엔트로피를 높게하여 다양한 행동 시도
         self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
         self.alpha = self.log_alpha.exp()
         self.alpha_optimizer = optim.Adam([self.log_alpha], lr=lr)
@@ -325,15 +239,44 @@ class SACAgent:
         self.action_bounds = action_bounds
         self.training_step = 0
 
-    # 🔧 전처리 함수 추가
+    # 전처리 함수 추가
     def preprocess_obs(self, obs, is_batch=False):
-        """MoraiSensor 출력 (120, 160, 1) → CNN 입력 tensor 변환"""
+        """복합 observation 처리: 이미지 + velocity + steering"""
         if is_batch:
-            # 배치: (B, 120, 160, 1) → (B, 1, 120, 160)
-            return torch.FloatTensor(obs).permute(0, 3, 1, 2).to(self.device)
+            # 배치 처리: obs는 obs_dict들의 리스트
+            images = []
+            vectors = []
+            for obs_dict in obs:
+                images.append(obs_dict['image'])
+                vectors.append(np.concatenate([obs_dict['velocity'], obs_dict['steering']]))
+            
+            # 텐서 변환
+            images = torch.FloatTensor(images).permute(0, 3, 1, 2).to(self.device)
+            vectors = torch.FloatTensor(vectors).to(self.device)
+            
+            # CNN으로 이미지 특징 추출
+            image_features = self.encoder(images)
+            
+            # 이미지 특징 + 벡터 정보 결합
+            combined_features = torch.cat([image_features, vectors], dim=1)
+            return combined_features
         else:
-            # 단일: (120, 160, 1) → (1, 1, 120, 160)
-            return torch.FloatTensor(obs).permute(2, 0, 1).unsqueeze(0).to(self.device)
+            # 단일 observation 처리
+            if isinstance(obs, dict):
+                # 복합 observation
+                image = torch.FloatTensor(obs['image']).permute(2, 0, 1).unsqueeze(0).to(self.device)
+                vector = torch.FloatTensor(np.concatenate([obs['velocity'], obs['steering']])).unsqueeze(0).to(self.device)
+                
+                # CNN으로 이미지 특징 추출
+                image_features = self.encoder(image)
+                
+                # 이미지 특징 + 벡터 정보 결합
+                combined_features = torch.cat([image_features, vector], dim=1)
+                return combined_features
+            else:
+                # 단순 이미지 (하위 호환성)
+                image = torch.FloatTensor(obs).permute(2, 0, 1).unsqueeze(0).to(self.device)
+                return self.encoder(image)
 
     def get_action(self, obs, training=True):
         # 초기 랜덤 탐색
@@ -343,13 +286,11 @@ class SACAgent:
             return self._scale_action(action)
         
         # 🔧 전처리 적용
-        obs = self.preprocess_obs(obs)
+        feature = self.preprocess_obs(obs)
         with torch.no_grad():
-            feature = self.encoder(obs)
             if training:
                 action, _ = self.actor.sample(feature)
                 action = action.cpu().numpy()[0]
-                
                 self.training_step += 1
             else:
                 mean, _ = self.actor(feature)
@@ -398,16 +339,16 @@ class SACAgent:
         (s, a, r, s_prime, d), indices, weights = batch
         weights = torch.FloatTensor(weights).to(self.device)
 
-        # 🔧 배치 전처리 적용
-        s = self.preprocess_obs(s, is_batch=True)
-        s_prime = self.preprocess_obs(s_prime, is_batch=True)
+        # 배치 전처리 적용
+        s_features = self.preprocess_obs(s, is_batch=True)
+        s_prime_features = self.preprocess_obs(s_prime, is_batch=True)
         a = torch.FloatTensor(a).to(self.device)
         r = torch.FloatTensor(r).to(self.device)
         d = torch.FloatTensor(d).to(self.device)
 
         # Critic 업데이트
-        z_critic = self.encoder(s).detach()
-        z_prime = self.encoder(s_prime).detach()
+        z_critic = s_features.detach()
+        z_prime = s_prime_features.detach()
 
         with torch.no_grad():
             next_action, next_log_prob = self.actor.sample(z_prime)
@@ -435,7 +376,7 @@ class SACAgent:
         self.critic2_opt.step()
 
         # Actor 업데이트
-        z_actor = self.encoder(s)
+        z_actor = s_features
         new_action, log_prob = self.actor.sample(z_actor)
         q1_new = self.critic1(z_actor, new_action)
         q2_new = self.critic2(z_actor, new_action)
@@ -452,6 +393,10 @@ class SACAgent:
         alpha_loss = -(self.log_alpha * (log_prob.detach() + self.target_entropy)).mean()
         self.alpha_optimizer.zero_grad()
         alpha_loss.backward()
+
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0) #Gradient Clinpping 추가
+        torch.nn.utils.clip_grad_norm_(self.encoder.parameters(), max_norm=1.0)
+
         self.alpha_optimizer.step()
         self.alpha = self.log_alpha.exp()
 

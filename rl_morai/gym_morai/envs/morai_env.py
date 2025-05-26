@@ -24,6 +24,8 @@ class MoraiEnv(gym.Env):
         self._terminated_fn = terminated_fn
         self._first_reset = True
 
+        self.last_steering = 0.0
+
         # 액션 설정
         if action_bounds is None:
             action_bounds = [(-0.7, 0.7), (10.0, 30.0)]  # 기본: 조향 [-0.7, 0.7], 스로틀 [10, 30]
@@ -32,18 +34,36 @@ class MoraiEnv(gym.Env):
         high = np.array([bound[1] for bound in action_bounds], dtype=np.float32)
         self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
-        # 관측공간은 grayscale 이미지 (80x160x1)
-        self.observation_space = spaces.Box(low=0, high=255,
-                                           shape=(160, 240, 1),
-                                           dtype=np.float32)
+        self.observation_space = spaces.Dict({
+            'image': spaces.Box(low=0.0, high=1.0, shape=(120, 160, 1), dtype=np.float32),
+            'velocity': spaces.Box(low=0.0, high=50.0, shape=(1,), dtype=np.float32),
+            'steering': spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+        })
 
         rospy.loginfo("Init Sensors...")
         while self.sensor.get_image() is None and not rospy.is_shutdown():
             rospy.sleep(0.1)
         rospy.loginfo("Init Complete")
 
+    def get_observation(self):
+        """현재 관측값을 복합 딕셔너리 형태로 반환"""
+        image = self.sensor.get_image()
+        velocity = self.sensor.get_velocity()
+        
+        if image is None:
+            return None
+            
+        obs = {
+            'image': image,
+            'velocity': np.array([velocity], dtype=np.float32),
+            'steering': np.array([self.last_steering], dtype=np.float32)
+        }
+        return obs
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+
+        self.last_steering = 0.0
 
         # 키보드 명령으로 시뮬레이터 리셋
         try:
@@ -70,7 +90,7 @@ class MoraiEnv(gym.Env):
 
         # 유효한 관측값을 받을 때까지 기다림 (리셋 후에만 확인)
         obs = None
-        timeout = 2.0  # 2초 타임아웃
+        timeout = 1.0  # 2초 타임아웃
         start_time = time.time()
         
         while obs is None and time.time() - start_time < timeout:
@@ -84,10 +104,12 @@ class MoraiEnv(gym.Env):
             rospy.logerr("CRITICAL ERROR: Failed to get valid observation after reset - terminating node")
             raise SensorTimeoutError("No valid sensor data received after timeout")
             
-        return obs, {}
+        return self.get_observation(), {}
 
     def step(self, action):
         steering, throttle = action
+        self.last_steering = float(steering)
+
         self.sensor.send_control(steering, throttle)
 
         time.sleep(0.1)  # 물리 엔진 반영 시간 대기
@@ -98,12 +120,23 @@ class MoraiEnv(gym.Env):
         done = self._terminated_fn(obs) if self._terminated_fn else False
 
         info = {}
-        return obs, reward, done, False, info
-
+        return self.get_observation(), reward, done, False, info
+    
     def render(self):
         image = self.sensor.get_image()
         if image is not None:
-            show = cv2.resize(image, (320, 160))
+            # 정규화된 이미지를 시각화용으로 변환
+            display_image = (image * 255).astype(np.uint8)
+            display_image = cv2.cvtColor(display_image, cv2.COLOR_GRAY2BGR)
+            show = cv2.resize(display_image, (320, 240))
+            
+            # 추가 정보 표시
+            velocity = self.sensor.get_velocity()
+            cv2.putText(show, f"Velocity: {velocity*3.6:.1f} km/h", (10, 20), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            cv2.putText(show, f"Steering: {self.last_steering:.2f}", (10, 40), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            
             cv2.imshow("Morai Camera", show)
             cv2.waitKey(1)
 
