@@ -251,7 +251,8 @@ class SACAgent:
                 vectors.append(np.concatenate([obs_dict['velocity'], obs_dict['steering']]))
             
             # 텐서 변환
-            images = torch.FloatTensor(images).permute(0, 3, 1, 2).to(self.device)
+            images_np = np.array(images)
+            images = torch.FloatTensor(images_np).permute(0, 3, 1, 2).to(self.device)
             vectors = torch.FloatTensor(vectors).to(self.device)
             
             # CNN으로 이미지 특징 추출

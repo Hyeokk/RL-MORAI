@@ -1,0 +1,3 @@
+<launch>
+  <node pkg="rl_morai" type="evaluate_ppo.py" name="ppo_evaluate" output="screen" launch-prefix="python3" />
+</launch>

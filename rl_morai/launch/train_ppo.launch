@@ -1,0 +1,3 @@
+<launch>
+  <node pkg="rl_morai" type="train_ppo.py" name="ppo_trainer" output="screen" launch-prefix="python3" />
+</launch>
