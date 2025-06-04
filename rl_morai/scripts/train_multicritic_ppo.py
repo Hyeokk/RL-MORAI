@@ -103,11 +103,13 @@ def main():
 
     # 에이전트 생성
     agent = PPOAgent((120, 160), 2, ACTION_BOUNDS, log_dir=LOG_DIR)
-    
+
     if ENV_ID == 1:
         agent.transfer_critic(from_env_id=0, to_env_id=1)
-    if ENV_ID == 2:
+    elif ENV_ID == 2:
         agent.transfer_critic(from_env_id=1, to_env_id=2)
+    else :
+        agent.create_critic(env_id=ENV_ID)
         
     # 학습 통계 변수
     episode_rewards = []
