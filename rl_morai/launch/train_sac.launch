@@ -1,3 +1,0 @@
-<launch>
-  <node pkg="rl_morai" type="train_sac.py" name="sac_trainer" output="screen" launch-prefix="python3" />
-</launch>

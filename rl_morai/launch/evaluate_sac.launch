@@ -1,3 +1,0 @@
-<launch>
-  <node pkg="rl_morai" type="evaluate_sac.py" name="sac_evaluate" output="screen" launch-prefix="python3" />
-</launch>
