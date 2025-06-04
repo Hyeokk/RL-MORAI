@@ -11,15 +11,15 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from gym_morai.envs.morai_env import MoraiEnv
 from src.reward_fns import RewardFns
 from src.terminated_fns import TerminatedFns
-from models.PPO import PPOAgent
+from models.MultiCriticPPO import MultiCriticPPOAgent as PPOAgent
 
 # =============================================================================
 # 설정
 # =============================================================================
 SAVE_DIR = "/home/kuuve/catkin_ws/src/pt/"
-ALGO_NAME = "SingleCriticPPO"
-LOG_DIR = f"/home/kuuve/catkin_ws/src/logs/{ALGO_NAME}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-os.makedirs(SAVE_DIR, exist_ok=True)
+ALGO_NAME = "MultiCriticNoTransfer"
+ENV_NUM = 0  # 환경 ID (0:실선, 1:점선, 2:야간)
+LOG_DIR = f"/home/kuuve/catkin_ws/src/logs/{ALGO_NAME}_env{ENV_NUM}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # 시드 설정
@@ -34,6 +34,7 @@ MAX_STEPS_PER_EPISODE = 10000
 UPDATE_INTERVAL = 2048
 MIN_EPISODE_STEPS = 5
 ACTION_BOUNDS = [(-0.4, 0.4), (15.0, 25.0)]
+ENV_ID = 0 # 환경 ID (0:실선, 1:점선, 2:야간)
 
 # 종료 플래그
 stop_flag = False
@@ -103,10 +104,7 @@ def main():
     # 에이전트 생성
     agent = PPOAgent((120, 160), 2, ACTION_BOUNDS, log_dir=LOG_DIR)
     
-    # 이전 모델 불러오기
-    if os.path.exists(os.path.join(SAVE_DIR, "PPO_critic.pt")):
-        agent.load_model(SAVE_DIR)
-        print("[LOAD] 이전 모델 불러오기 완료")
+    agent.create_critic(env_id=ENV_ID)
     
     # 학습 통계 변수
     episode_rewards = []
@@ -138,7 +136,7 @@ def main():
                 break
                 
             # 액션 선택
-            action, log_prob, value = agent.get_action(obs_dict, training=True)
+            action, log_prob, value = agent.get_action(obs_dict, training=True, env_id=ENV_ID)
             next_obs_dict, reward, done, _, _ = env.step(action)
             
             if next_obs_dict is None:

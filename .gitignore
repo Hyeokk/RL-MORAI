@@ -10,3 +10,6 @@ __pycache__/
 
 # VSCode 설정
 .vscode/
+
+# 폴더
+waypoint_maker/
