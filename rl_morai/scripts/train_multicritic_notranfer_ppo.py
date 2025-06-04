@@ -160,7 +160,7 @@ def main():
             # PPO 업데이트
             if total_steps % UPDATE_INTERVAL == 0:
                 print(f"[UPDATE] Step {total_steps}에서 PPO 업데이트 수행")
-                train_metrics = agent.train()
+                train_metrics = agent.train(env_id=ENV_ID)
                 if train_metrics:
                     print(f"  손실 - Actor: {train_metrics['actor_loss']:.4f}, "
                           f"Critic: {train_metrics['critic_loss']:.4f}, "

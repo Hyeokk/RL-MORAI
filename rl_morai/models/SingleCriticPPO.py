@@ -144,7 +144,7 @@ class LaneFollowingCNN(nn.Module):
             dummy = torch.zeros(1, 1, input_shape[0], input_shape[1])
             dummy = self.apply_roi(dummy)
             dummy = self.backbone(dummy)
-            flattened_dim = dummy.view(1, -1).shape[1]
+            flattened_dim = dummy.reshape(1, -1).shape[1]
 
         self.feature_extractor = nn.Sequential(
             nn.Linear(flattened_dim, 512),
@@ -161,7 +161,7 @@ class LaneFollowingCNN(nn.Module):
     def forward(self, x):
         x = self.apply_roi(x)
         x = self.backbone(x)
-        x = x.view(x.size(0), -1)
+        x = x.reshape(x.size(0), -1)
         x = self.feature_extractor(x)
         return x
 
