@@ -1,0 +1,12 @@
+# macOS 시스템 파일
+.DS_Store
+
+# Python 캐시 파일
+__pycache__/
+*.pyc
+
+# 환경설정 파일
+.env
+
+# VSCode 설정
+.vscode/
