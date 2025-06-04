@@ -29,8 +29,8 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # 학습 파라미터
-NUM_EPISODES = 10000
-MAX_STEPS_PER_EPISODE = 10000
+NUM_EPISODES = 2000
+MAX_STEPS_PER_EPISODE = 500
 UPDATE_INTERVAL = 2048
 MIN_EPISODE_STEPS = 5
 ACTION_BOUNDS = [(-0.4, 0.4), (15.0, 25.0)]
@@ -201,13 +201,13 @@ def main():
 
         # 모델 저장
         if (episode + 1) % 100 == 0:
-            agent.save_model(SAVE_DIR)
+            agent.save_model(SAVE_DIR, env_id=ENV_ID)
             print(f"[SAVE] 모델 저장 완료 (Episode {episode+1})")
 
     # =============================================================================
     # 학습 완료
     # =============================================================================
-    agent.save_model(SAVE_DIR)
+    agent.save_model(SAVE_DIR, env_id=ENV_ID)
     
     print("PPO 학습 완료!")
     print(f"총 에피소드: {episode + 1}")
