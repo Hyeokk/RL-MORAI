@@ -14,6 +14,26 @@ class SensorTimeoutError(Exception):
     """타임아웃 동안 유효한 센서 데이터를 받지 못한 경우 발생하는 예외"""
     pass
 
+def press_key(key, delay=0.3):
+    """
+    Simulator 창에 지정된 키 입력을 보냄.
+    :param key: 'q', 'i' 등 입력할 키
+    :param delay: 키 입력 후 대기 시간
+    """
+    try:
+        window_id = subprocess.check_output(
+            ['xdotool', 'search', '--name', 'Simulator']
+        ).decode().strip().split('\n')[-1]
+
+        subprocess.run(
+            ['xdotool', 'windowactivate', '--sync', window_id, 'key', key],
+            check=True
+        )
+        time.sleep(delay)
+
+    except subprocess.CalledProcessError as e:
+        rospy.logerr(f"press_key('{key}') 실패: {e}")
+
 class MoraiEnv(gym.Env):
     def __init__(self, reward_fn=None, terminated_fn=None, action_bounds=None, csv_path=None):
         super(MoraiEnv, self).__init__()
@@ -67,12 +87,6 @@ class MoraiEnv(gym.Env):
 
         # 키보드 명령으로 시뮬레이터 리셋
         try:
-            window_id = subprocess.check_output(['xdotool', 'search', '--name', 'Simulator']).decode().strip().split('\n')[-1]
-
-            def press_key(key, delay=0.5):
-                subprocess.run(['xdotool', 'windowactivate', '--sync', window_id, 'key', key], check=True)
-                time.sleep(delay)
-
             if self._first_reset:
                 press_key('i')
                 press_key('q')

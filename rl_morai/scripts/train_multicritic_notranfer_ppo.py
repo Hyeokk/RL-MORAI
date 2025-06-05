@@ -8,7 +8,7 @@ import random
 from datetime import datetime
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from gym_morai.envs.morai_env import MoraiEnv
+from gym_morai.envs.morai_env import MoraiEnv, press_key
 from src.reward_fns import RewardFns
 from src.terminated_fns import TerminatedFns
 from models.MultiCriticPPO import MultiCriticPPOAgent as PPOAgent
@@ -49,27 +49,6 @@ signal.signal(signal.SIGINT, signal_handler)
 # =============================================================================
 # 유틸리티 함수
 # =============================================================================
-def force_reset_environment(env, action_bounds):
-    """환경 상태만 초기화"""
-    try:
-        print("[RESET] 환경 reset() 수행 중...")
-        obs_dict, _ = env.reset()
-        if obs_dict is None:
-            raise ValueError("Reset 실패: 관측값 없음")
-        print("[RESET] 환경 reset 완료")
-        return env
-    except Exception as e:
-        print(f"[ERROR] reset 실패, env 재생성: {e}")
-        env.close()
-        time.sleep(2)
-        new_env = MoraiEnv(action_bounds=action_bounds, csv_path=CENTERLINE_CSV_PATH)
-        sensor = new_env.sensor
-        new_env.set_reward_fn(RewardFns.adaptive_speed_lanefollow_reward(sensor))
-        new_env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.7))
-        print("[RESET] 환경 재초기화 완료")
-        return new_env
-
-
 def is_invalid_episode(episode_steps, min_steps=MIN_EPISODE_STEPS):
     """유효하지 않은 에피소드 판별"""
     return episode_steps <= min_steps
@@ -120,6 +99,9 @@ def main():
     total_step1_count = 0
     consecutive_short_episodes = 0
     last_update_step = -1
+    low_velocity_count = 0
+    LOW_VELOCITY_THRESHOLD = 0.5   # 속도 임계값 (m/s)
+    LOW_VELOCITY_LIMIT = 5
     
     # =============================================================================
     # 학습 루프
@@ -149,9 +131,28 @@ def main():
             if next_obs_dict is None:
                 break
             
-            # 경험 저장
-            is_step1 = agent.store(obs_dict, action, reward, value[0], log_prob[0], 
-                                 done, next_obs_dict if not done else None)
+            current_velocity = env.sensor.get_velocity()
+
+            if current_velocity < LOW_VELOCITY_THRESHOLD:
+                low_velocity_count += 1
+                if low_velocity_count >= LOW_VELOCITY_LIMIT:
+                    print(f"[WARN] 후진 또는 저속 감지: {LOW_VELOCITY_LIMIT}회 이상 velocity < {LOW_VELOCITY_THRESHOLD} m/s")
+
+                    press_key('q')  # 자율주행 모드 재시작
+
+                    agent.buffer.clear()
+                    obs_dict, _ = env.reset()
+
+                    low_velocity_count = 0
+                    break
+            else:
+                low_velocity_count = 0
+
+            if episode_steps > 1:
+                is_step1 = agent.store(obs_dict, action, reward, value[0], log_prob[0],
+                               done, next_obs_dict if not done else None)
+            else:
+                is_step1 = True
             
             # Step 1 에피소드 조기 감지
             if is_step1 and done:
@@ -190,13 +191,16 @@ def main():
             
             print(f"무효 에피소드! Episode {episode+1}: {episode_steps}스텝 "
                   f"(연속 {consecutive_short_episodes}회)")
-            
-            # 환경 강제 리셋
-            env = force_reset_environment(env, ACTION_BOUNDS)
+
             agent.buffer.clear()
             total_steps = max(0, total_steps - episode_steps)
-            consecutive_short_episodes = 0
-            time.sleep(1)
+
+            # 일정 횟수 이상 연속되었을 때만 환경 리셋
+            if consecutive_short_episodes >= 3:
+                print(f"[WARN] 연속 {consecutive_short_episodes}회 무효 에피소드 → 환경 리셋")
+                obs_dict, _ = env.reset()
+                consecutive_short_episodes = 0
+
             continue
         else:
             consecutive_short_episodes = 0
