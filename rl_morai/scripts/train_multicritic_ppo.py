@@ -153,9 +153,11 @@ def main():
             if next_obs_dict is None:
                 break
             
-            # 경험 저장
-            is_step1 = agent.store(obs_dict, action, reward, value[0], log_prob[0], 
-                                 done, next_obs_dict if not done else None)
+            if episode_steps > 0:
+                is_step1 = agent.store(obs_dict, action, reward, value[0], log_prob[0],
+                               done, next_obs_dict if not done else None)
+            else:
+                is_step1 = True
             
             # Step 1 에피소드 조기 감지
             if is_step1 and done:
@@ -185,7 +187,6 @@ def main():
             if done:
                 break
 
-        # 에피소드 후처리
         if is_invalid_episode(episode_steps):
             consecutive_short_episodes += 1
             total_short_episodes += 1
@@ -194,12 +195,16 @@ def main():
             
             print(f"무효 에피소드! Episode {episode+1}: {episode_steps}스텝 "
                   f"(연속 {consecutive_short_episodes}회)")
-            
-            # 환경 강제 리셋
-            env = force_reset_environment(env, ACTION_BOUNDS)
+
             agent.buffer.clear()
             total_steps = max(0, total_steps - episode_steps)
-            consecutive_short_episodes = 0
+
+            # 일정 횟수 이상 연속되었을 때만 환경 리셋
+            if consecutive_short_episodes >= 3:
+                print(f"[WARN] 연속 {consecutive_short_episodes}회 무효 에피소드 → 환경 리셋")
+                env = force_reset_environment(env, ACTION_BOUNDS)
+                consecutive_short_episodes = 0
+
             continue
         else:
             consecutive_short_episodes = 0
