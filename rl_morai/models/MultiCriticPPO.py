@@ -100,25 +100,6 @@ class LaneFollowingCNN(nn.Module):
         
         return x
 
-    def apply_roi(self, x):
-        """ROI 적용 (상단 30% 제거)"""
-        crop_height = int(x.size(2) * self.roi_crop_ratio)
-        return x[:, :, crop_height:, :]
-
-    def forward(self, x):
-        # ROI 적용
-        x = self.apply_roi(x)
-        
-        # 백본 통과
-        x = self.backbone(x)
-        
-        # 평탄화 및 특징 추출
-        x = x.reshape(x.size(0), -1)
-        x = self.feature_extractor(x)
-        
-        return x
-
-
     """차선 검출을 위한 경량 CNN (출력 크기 자동 계산)"""
     def __init__(self, input_shape=(120, 160), output_dim=256):
         super().__init__()
@@ -194,7 +175,8 @@ class PPOActor(nn.Module):
     def forward(self, x):
         features = self.network(x)
         mean = self.mean_head(features)
-        std = torch.exp(self.log_std.clamp(-20, 2))
+        #std = torch.exp(self.log_std.clamp(-20, 2))
+        std = torch.exp(self.log_std.clamp(-20, 1))
         return mean, std
 
     def get_action_and_log_prob(self, x):
@@ -313,7 +295,7 @@ class MultiCriticPPOAgent:
         # 하이퍼파라미터 (차선 주행에 최적화)
         self.gamma = 0.995          # 할인율 (미래 보상 중시)
         self.lam = 0.95             # GAE lambda
-        self.clip_epsilon = 0.15    # PPO 클리핑
+        self.clip_epsilon = 0.1     # PPO 클리핑
         self.c1 = 0.4               # Value function 계수
         self.c2 = 0.05              # Entropy 계수
         self.ppo_epochs = 4         # PPO 업데이트 횟수

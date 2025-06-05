@@ -23,7 +23,7 @@ ENV_NUM = 0  # 환경 ID (0:실선, 1:점선, 2:야간)
 LOG_DIR = f"/home/kuuve/catkin_ws/src/logs/{ALGO_NAME}_env{ENV_NUM}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 os.makedirs(LOG_DIR, exist_ok=True)
 
-CENTERLINE_CSV_PATH = f"/home/kuuve/catkin_ws/src/data/{LANE_TYPE}.csv"
+CENTERLINE_CSV_PATH = f"/home/kuuve/catkin_ws/src/data/{LANE_TYPE}_lane.csv"
 
 # 시드 설정
 SEED = 42
@@ -50,22 +50,25 @@ signal.signal(signal.SIGINT, signal_handler)
 # 유틸리티 함수
 # =============================================================================
 def force_reset_environment(env, action_bounds):
-    """환경 강제 재초기화"""
+    """환경 상태만 초기화"""
     try:
-        print("[RESET] 환경 강제 재초기화 중...")
+        print("[RESET] 환경 reset() 수행 중...")
+        obs_dict, _ = env.reset()
+        if obs_dict is None:
+            raise ValueError("Reset 실패: 관측값 없음")
+        print("[RESET] 환경 reset 완료")
+        return env
+    except Exception as e:
+        print(f"[ERROR] reset 실패, env 재생성: {e}")
         env.close()
         time.sleep(2)
-        
         new_env = MoraiEnv(action_bounds=action_bounds, csv_path=CENTERLINE_CSV_PATH)
         sensor = new_env.sensor
         new_env.set_reward_fn(RewardFns.adaptive_speed_lanefollow_reward(sensor))
-        new_env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.5))
-        
+        new_env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.7))
         print("[RESET] 환경 재초기화 완료")
         return new_env
-    except Exception as e:
-        print(f"[ERROR] 환경 재초기화 실패: {e}")
-        return env
+
 
 def is_invalid_episode(episode_steps, min_steps=MIN_EPISODE_STEPS):
     """유효하지 않은 에피소드 판별"""
@@ -116,6 +119,7 @@ def main():
     total_short_episodes = 0
     total_step1_count = 0
     consecutive_short_episodes = 0
+    last_update_step = -1
     
     # =============================================================================
     # 학습 루프
@@ -161,13 +165,18 @@ def main():
             total_steps += 1
             
             # PPO 업데이트
-            if total_steps % UPDATE_INTERVAL == 0:
+            if total_steps % UPDATE_INTERVAL ==0 and total_steps != last_update_step:
                 print(f"[UPDATE] Step {total_steps}에서 PPO 업데이트 수행")
                 train_metrics = agent.train(env_id=ENV_ID)
+                last_update_step = total_steps
                 if train_metrics:
                     print(f"  손실 - Actor: {train_metrics['actor_loss']:.4f}, "
                           f"Critic: {train_metrics['critic_loss']:.4f}, "
                           f"Entropy: {train_metrics['entropy']:.4f}")
+                if obs_dict is None:
+                    continue
+                agent.buffer.clear()
+                break
             
             if done:
                 break

@@ -100,25 +100,6 @@ class LaneFollowingCNN(nn.Module):
         
         return x
 
-    def apply_roi(self, x):
-        """ROI 적용 (상단 30% 제거)"""
-        crop_height = int(x.size(2) * self.roi_crop_ratio)
-        return x[:, :, crop_height:, :]
-
-    def forward(self, x):
-        # ROI 적용
-        x = self.apply_roi(x)
-        
-        # 백본 통과
-        x = self.backbone(x)
-        
-        # 평탄화 및 특징 추출
-        x = x.reshape(x.size(0), -1)
-        x = self.feature_extractor(x)
-        
-        return x
-
-
     """차선 검출을 위한 경량 CNN (출력 크기 자동 계산)"""
     def __init__(self, input_shape=(120, 160), output_dim=256):
         super().__init__()

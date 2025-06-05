@@ -67,24 +67,21 @@ class MoraiEnv(gym.Env):
 
         # 키보드 명령으로 시뮬레이터 리셋
         try:
+            window_id = subprocess.check_output(['xdotool', 'search', '--name', 'Simulator']).decode().strip().split('\n')[-1]
+
+            def press_key(key, delay=0.5):
+                subprocess.run(['xdotool', 'windowactivate', '--sync', window_id, 'key', key], check=True)
+                time.sleep(delay)
+
             if self._first_reset:
-                # 최초 1회: i → q
-                subprocess.run(['xdotool', 'search', '--name', 'Simulator', 
-                               'windowactivate', '--sync', 'key', 'i'], check=True)
-                time.sleep(0.3)
-                subprocess.run(['xdotool', 'search', '--name', 'Simulator', 
-                               'windowactivate', '--sync', 'key', 'q'], check=True)
+                press_key('i')
+                press_key('q')
                 self._first_reset = False
             else:
-                # 이후: q → i → q
-                subprocess.run(['xdotool', 'search', '--name', 'Simulator', 
-                               'windowactivate', '--sync', 'key', 'q'], check=True)
-                time.sleep(0.3)
-                subprocess.run(['xdotool', 'search', '--name', 'Simulator', 
-                               'windowactivate', '--sync', 'key', 'i'], check=True)
-                time.sleep(0.3)
-                subprocess.run(['xdotool', 'search', '--name', 'Simulator', 
-                               'windowactivate', '--sync', 'key', 'q'], check=True)
+                press_key('q')
+                press_key('i')
+                press_key('q')
+
         except subprocess.CalledProcessError as e:
             rospy.logerr(f"Reset failed: {e}")
 
