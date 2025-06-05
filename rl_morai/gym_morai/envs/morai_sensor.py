@@ -9,10 +9,11 @@ import time
 from src.utils import Cal_CTE
 
 class MoraiSensor:
-    def __init__(self):
+    def __init__(self, csv_path='/home/kuuve/catkin_ws/src/data/data.csv'):
         self.bridge = CvBridge()
         self.image = None
         self.odom = None
+        self.csv_path = csv_path
         self.image_subscribed = False
         self.odom_subscribed = False
         self.cmd_vel_pub = rospy.Publisher('/ctrl_cmd', CtrlCmd, queue_size=1)
@@ -89,13 +90,13 @@ class MoraiSensor:
         velocity = self.current_velocity if self.current_velocity is not None else 0.0
         return velocity
     
-    def cal_cte(self, csv_path='/home/kuuve/catkin_ws/src/data/data.csv'):
+    def cal_cte(self):
         agent_pos = self.get_position()
         if agent_pos is None:
             rospy.logwarn("Agent position not available")
             return None
 
-        xy_path = Cal_CTE.load_centerline(csv_path)
+        xy_path = Cal_CTE.load_centerline(self.csv_path)
         cte = Cal_CTE.calculate_cte(agent_pos, xy_path)
         
         return cte

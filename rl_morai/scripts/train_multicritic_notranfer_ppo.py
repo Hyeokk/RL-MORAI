@@ -18,9 +18,12 @@ from models.MultiCriticPPO import MultiCriticPPOAgent as PPOAgent
 # =============================================================================
 SAVE_DIR = "/home/kuuve/catkin_ws/src/pt/"
 ALGO_NAME = "MultiCriticNoTransfer"
+LANE_TYPE = "solid"  # "solid", "dashed", "night"
 ENV_NUM = 0  # 환경 ID (0:실선, 1:점선, 2:야간)
 LOG_DIR = f"/home/kuuve/catkin_ws/src/logs/{ALGO_NAME}_env{ENV_NUM}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 os.makedirs(LOG_DIR, exist_ok=True)
+
+CENTERLINE_CSV_PATH = f"/home/kuuve/catkin_ws/src/data/{LANE_TYPE}.csv"
 
 # 시드 설정
 SEED = 42
@@ -53,7 +56,7 @@ def force_reset_environment(env, action_bounds):
         env.close()
         time.sleep(2)
         
-        new_env = MoraiEnv(action_bounds=action_bounds)
+        new_env = MoraiEnv(action_bounds=action_bounds, csv_path=CENTERLINE_CSV_PATH)
         sensor = new_env.sensor
         new_env.set_reward_fn(RewardFns.adaptive_speed_lanefollow_reward(sensor))
         new_env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.5))
@@ -90,7 +93,7 @@ def main():
     print(f"TensorBoard: tensorboard --logdir={LOG_DIR}")
     
     # 환경 초기화
-    env = MoraiEnv(action_bounds=ACTION_BOUNDS)
+    env = MoraiEnv(action_bounds=ACTION_BOUNDS, csv_path=CENTERLINE_CSV_PATH)
     sensor = env.sensor
     env.set_reward_fn(RewardFns.adaptive_speed_lanefollow_reward(sensor))
     env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.5))

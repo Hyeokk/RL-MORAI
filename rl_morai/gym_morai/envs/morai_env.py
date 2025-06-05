@@ -15,11 +15,11 @@ class SensorTimeoutError(Exception):
     pass
 
 class MoraiEnv(gym.Env):
-    def __init__(self, reward_fn=None, terminated_fn=None, action_bounds=None):
+    def __init__(self, reward_fn=None, terminated_fn=None, action_bounds=None, csv_path=None):
         super(MoraiEnv, self).__init__()
         rospy.init_node('morai_rl_env', anonymous=True)
 
-        self.sensor = MoraiSensor()
+        self.sensor = MoraiSensor(csv_path=csv_path)
         self._reward_fn = reward_fn
         self._terminated_fn = terminated_fn
         self._first_reset = True

@@ -314,8 +314,8 @@ class PPOAgent:
         self.gamma = 0.995          # 할인율 (미래 보상 중시)
         self.lam = 0.95             # GAE lambda
         self.clip_epsilon = 0.2     # PPO 클리핑
-        self.c1 = 0.25              # Value function 계수
-        self.c2 = 0.02              # Entropy 계수
+        self.c1 = 0.4               # Value function 계수
+        self.c2 = 0.05              # Entropy 계수
         self.ppo_epochs = 4         # PPO 업데이트 횟수
         self.mini_batch_size = 128  # 미니배치 크기
         self.max_grad_norm = 0.5    # Gradient clipping
@@ -327,9 +327,9 @@ class PPOAgent:
         self.critic = PPOCritic(feature_dim).to(self.device)
         
         # 옵티마이저
-        self.actor_lr = 3e-4
+        self.actor_lr = 5e-5
         self.critic_lr = 1e-4
-        self.encoder_lr = 1e-4
+        self.encoder_lr = 5e-5
         
         self.encoder_opt = optim.Adam(self.encoder.parameters(), lr=self.encoder_lr)
         self.actor_opt = optim.Adam(self.actor.parameters(), lr=self.actor_lr)

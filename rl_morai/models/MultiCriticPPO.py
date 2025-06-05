@@ -313,9 +313,9 @@ class MultiCriticPPOAgent:
         # 하이퍼파라미터 (차선 주행에 최적화)
         self.gamma = 0.995          # 할인율 (미래 보상 중시)
         self.lam = 0.95             # GAE lambda
-        self.clip_epsilon = 0.2     # PPO 클리핑
-        self.c1 = 0.25              # Value function 계수
-        self.c2 = 0.02              # Entropy 계수
+        self.clip_epsilon = 0.15    # PPO 클리핑
+        self.c1 = 0.4               # Value function 계수
+        self.c2 = 0.05              # Entropy 계수
         self.ppo_epochs = 4         # PPO 업데이트 횟수
         self.mini_batch_size = 128  # 미니배치 크기
         self.max_grad_norm = 0.5    # Gradient clipping
@@ -330,9 +330,9 @@ class MultiCriticPPOAgent:
         self.optimizers = dict()
             
         # 옵티마이저
-        self.actor_lr = 3e-4
+        self.actor_lr = 5e-5
         self.critic_lr = 1e-4
-        self.encoder_lr = 1e-4
+        self.encoder_lr = 5e-5
         
         self.encoder_opt = optim.Adam(self.encoder.parameters(), lr=self.encoder_lr)
         self.actor_opt = optim.Adam(self.actor.parameters(), lr=self.actor_lr)
@@ -499,7 +499,7 @@ class MultiCriticPPOAgent:
         # 텐서 변환
         with torch.no_grad():
             states_tensor = self.preprocess_obs(states, is_batch=True).detach()
-        actions_tensor = torch.FloatTensor(actions).to(self.device)
+        actions_tensor = torch.FloatTensor(np.array(actions)).to(self.device)
         old_log_probs_tensor = torch.FloatTensor(old_log_probs).to(self.device).unsqueeze(1)
         advantages_tensor = torch.FloatTensor(advantages).to(self.device).unsqueeze(1)
         returns_tensor = torch.FloatTensor(returns).to(self.device).unsqueeze(1)
