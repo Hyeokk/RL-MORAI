@@ -146,7 +146,7 @@ def main():
 
                     press_key('q')  # 자율주행 모드 재시작
 
-                    agent.buffer.clear()
+                    agent.buffer.remove_last_episode()
                     obs_dict, _ = env.reset()
 
                     low_velocity_count = 0
@@ -197,7 +197,7 @@ def main():
             print(f"무효 에피소드! Episode {episode+1}: {episode_steps}스텝 "
                   f"(연속 {consecutive_short_episodes}회)")
 
-            agent.buffer.clear()
+            agent.buffer.remove_last_episode()
             total_steps = max(0, total_steps - episode_steps)
 
             # 일정 횟수 이상 연속되었을 때만 환경 리셋

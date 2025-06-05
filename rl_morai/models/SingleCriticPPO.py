@@ -175,7 +175,7 @@ class PPOActor(nn.Module):
     def forward(self, x):
         features = self.network(x)
         mean = self.mean_head(features)
-        std = torch.exp(self.log_std.clamp(-20, 2))
+        std = torch.exp(self.log_std.clamp(-20, 1))
         return mean, std
 
     def get_action_and_log_prob(self, x):
@@ -294,7 +294,7 @@ class PPOAgent:
         # 하이퍼파라미터 (차선 주행에 최적화)
         self.gamma = 0.995          # 할인율 (미래 보상 중시)
         self.lam = 0.95             # GAE lambda
-        self.clip_epsilon = 0.2     # PPO 클리핑
+        self.clip_epsilon = 0.1     # PPO 클리핑
         self.c1 = 0.4               # Value function 계수
         self.c2 = 0.05              # Entropy 계수
         self.ppo_epochs = 4         # PPO 업데이트 횟수

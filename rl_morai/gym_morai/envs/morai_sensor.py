@@ -9,7 +9,7 @@ import time
 from src.utils import Cal_CTE
 
 class MoraiSensor:
-    def __init__(self, csv_path='/home/kuuve/catkin_ws/src/data/data.csv'):
+    def __init__(self, csv_path='/home/hyeokk/catkin_ws/src/data/data.csv'):
         self.bridge = CvBridge()
         self.image = None
         self.odom = None

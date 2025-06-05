@@ -16,14 +16,14 @@ from models.MultiCriticPPO import MultiCriticPPOAgent as PPOAgent
 # =============================================================================
 # 설정
 # =============================================================================
-SAVE_DIR = "/home/kuuve/catkin_ws/src/pt/"
+SAVE_DIR = "/home/hyeokk/catkin_ws/src/pt/"
 ALGO_NAME = "MultiCriticNoTransfer"
 LANE_TYPE = "solid"  # "solid", "dashed", "night"
 ENV_NUM = 0  # 환경 ID (0:실선, 1:점선, 2:야간)
-LOG_DIR = f"/home/kuuve/catkin_ws/src/logs/{ALGO_NAME}_env{ENV_NUM}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+LOG_DIR = f"/home/hyeokk/catkin_ws/src/logs/{ALGO_NAME}_env{ENV_NUM}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 os.makedirs(LOG_DIR, exist_ok=True)
 
-CENTERLINE_CSV_PATH = f"/home/kuuve/catkin_ws/src/data/{LANE_TYPE}_lane.csv"
+CENTERLINE_CSV_PATH = f"/home/hyeokk/catkin_ws/src/data/{LANE_TYPE}_lane.csv"
 
 # 시드 설정
 SEED = 42
@@ -78,7 +78,7 @@ def main():
     env = MoraiEnv(action_bounds=ACTION_BOUNDS, csv_path=CENTERLINE_CSV_PATH)
     sensor = env.sensor
     env.set_reward_fn(RewardFns.adaptive_speed_lanefollow_reward(sensor))
-    env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.5))
+    env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.7))
 
     # 초기 관측 확인
     obs_dict, _ = env.reset()
@@ -140,7 +140,7 @@ def main():
 
                     press_key('q')  # 자율주행 모드 재시작
 
-                    agent.buffer.clear()
+                    agent.buffer.remove_last_episode()
                     obs_dict, _ = env.reset()
 
                     low_velocity_count = 0
@@ -192,7 +192,7 @@ def main():
             print(f"무효 에피소드! Episode {episode+1}: {episode_steps}스텝 "
                   f"(연속 {consecutive_short_episodes}회)")
 
-            agent.buffer.clear()
+            agent.buffer.remove_last_episode()
             total_steps = max(0, total_steps - episode_steps)
 
             # 일정 횟수 이상 연속되었을 때만 환경 리셋
