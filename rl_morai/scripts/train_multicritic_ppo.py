@@ -203,6 +203,7 @@ def main():
             # 일정 횟수 이상 연속되었을 때만 환경 리셋
             if consecutive_short_episodes >= 3:
                 print(f"[WARN] 연속 {consecutive_short_episodes}회 무효 에피소드 → 환경 리셋")
+                press_key('q')
                 obs_dict, _ = env.reset()
                 consecutive_short_episodes = 0
 

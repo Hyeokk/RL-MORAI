@@ -13,3 +13,5 @@ __pycache__/
 
 # 폴더
 waypoint_maker/
+pt/
+logs/
