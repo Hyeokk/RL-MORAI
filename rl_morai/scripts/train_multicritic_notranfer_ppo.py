@@ -18,9 +18,9 @@ from models.MultiCriticPPO import MultiCriticPPOAgent as PPOAgent
 # =============================================================================
 SAVE_DIR = "/home/hyeokk/catkin_ws/src/pt/"
 ALGO_NAME = "MultiCriticNoTransfer"
-LANE_TYPE = "dashed"  # "solid", "dashed", "night"
-ENV_NUM = 1  # 환경 ID (0:실선, 1:점선, 2:야간)
-ENV_ID = 1 # 환경 ID (0:실선, 1:점선, 2:야간)
+LANE_TYPE = "night"  # "solid", "dashed", "night"
+ENV_NUM = 2  # 환경 ID (0:실선, 1:점선, 2:야간)
+ENV_ID = 2 # 환경 ID (0:실선, 1:점선, 2:야간)
 LOG_DIR = f"/home/hyeokk/catkin_ws/src/logs/{ALGO_NAME}_env{ENV_NUM}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 os.makedirs(LOG_DIR, exist_ok=True)
 

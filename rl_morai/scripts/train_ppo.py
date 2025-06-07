@@ -18,8 +18,9 @@ from models.SingleCriticPPO import PPOAgent
 # =============================================================================
 SAVE_DIR = "/home/hyeokk/catkin_ws/src/pt/"
 ALGO_NAME = "SingleCriticPPO"
-LANE_TYPE = "solid"  # "solid", "dashed", "night"
-LOG_DIR = f"/home/hyeokk/catkin_ws/src/logs/{ALGO_NAME}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+LANE_TYPE = "dashed"  # "solid", "dashed", "night"
+ENV_NUM = 1  # 환경 ID (0:실선, 1:점선, 2:야간)
+LOG_DIR = f"/home/kuuve/catkin_ws/src/logs/{ALGO_NAME}_env{ENV_NUM}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -32,7 +33,7 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # 학습 파라미터
-NUM_EPISODES = 2000
+NUM_EPISODES = 3000
 MAX_STEPS_PER_EPISODE = 500
 UPDATE_INTERVAL = 2048
 MIN_EPISODE_STEPS = 5
