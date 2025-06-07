@@ -596,7 +596,12 @@ class MultiCriticPPOAgent:
         self.encoder.load_state_dict(torch.load(os.path.join(load_path, "PPO_encoder.pt")))
         self.actor.load_state_dict(torch.load(os.path.join(load_path, "PPO_actor.pt")))
         self.critics[env_id] = PPOCritic(258).to(self.device)
-        self.critics[env_id].load_state_dict(torch.load(os.path.join(load_path, f"PPO_critic_{env_id}.pt")))
+        critic_path = os.path.join(load_path, f"PPO_critic_{env_id}.pt")
+        if os.path.exists(critic_path):
+            self.critics[env_id].load_state_dict(torch.load(critic_path))
+            print(f"[LOAD] Critic {env_id} 로드 완료")
+        else:
+            print(f"[INFO] Critic {env_id} 가중치 없음 → 랜덤 초기화로 생성됨")
         self.optimizers[env_id] = optim.Adam(self.critics[env_id].parameters(), lr=1e-4)
         print(f"모델 로드 완료: {load_path}")
 

@@ -18,8 +18,9 @@ from models.MultiCriticPPO import MultiCriticPPOAgent as PPOAgent
 # =============================================================================
 SAVE_DIR = "/home/hyeokk/catkin_ws/src/pt/"
 ALGO_NAME = "MultiCriticNoTransfer"
-LANE_TYPE = "solid"  # "solid", "dashed", "night"
-ENV_NUM = 0  # 환경 ID (0:실선, 1:점선, 2:야간)
+LANE_TYPE = "dashed"  # "solid", "dashed", "night"
+ENV_NUM = 1  # 환경 ID (0:실선, 1:점선, 2:야간)
+ENV_ID = 1 # 환경 ID (0:실선, 1:점선, 2:야간)
 LOG_DIR = f"/home/hyeokk/catkin_ws/src/logs/{ALGO_NAME}_env{ENV_NUM}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -32,12 +33,11 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # 학습 파라미터
-NUM_EPISODES = 2000
+NUM_EPISODES = 3000
 MAX_STEPS_PER_EPISODE = 500
 UPDATE_INTERVAL = 2048
 MIN_EPISODE_STEPS = 5
 ACTION_BOUNDS = [(-0.4, 0.4), (15.0, 25.0)]
-ENV_ID = 0 # 환경 ID (0:실선, 1:점선, 2:야간)
 
 # 종료 플래그
 stop_flag = False
@@ -78,7 +78,7 @@ def main():
     env = MoraiEnv(action_bounds=ACTION_BOUNDS, csv_path=CENTERLINE_CSV_PATH)
     sensor = env.sensor
     env.set_reward_fn(RewardFns.adaptive_speed_lanefollow_reward(sensor))
-    env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.7))
+    env.set_episode_over_fn(TerminatedFns.cte_done(sensor, max_cte=0.6))
 
     # 초기 관측 확인
     obs_dict, _ = env.reset()
@@ -89,7 +89,7 @@ def main():
     # 에이전트 생성
     agent = PPOAgent((120, 160), 2, ACTION_BOUNDS, log_dir=LOG_DIR)
     
-    agent.create_critic(env_id=ENV_ID)
+    agent.load_model(SAVE_DIR, env_id=ENV_ID)
     
     # 학습 통계 변수
     episode_rewards = []
