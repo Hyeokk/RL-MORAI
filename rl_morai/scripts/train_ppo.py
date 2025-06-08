@@ -18,9 +18,9 @@ from models.SingleCriticPPO import PPOAgent
 # =============================================================================
 SAVE_DIR = "/home/hyeokk/catkin_ws/src/pt/"
 ALGO_NAME = "SingleCriticPPO"
-LANE_TYPE = "dashed"  # "solid", "dashed", "night"
-ENV_NUM = 1  # 환경 ID (0:실선, 1:점선, 2:야간)
-LOG_DIR = f"/home/kuuve/catkin_ws/src/logs/{ALGO_NAME}_env{ENV_NUM}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+LANE_TYPE = "night"  # "solid", "dashed", "night"
+ENV_NUM = 2  # 환경 ID (0:실선, 1:점선, 2:야간)
+LOG_DIR = f"/home/hyeokk/catkin_ws/src/logs/{ALGO_NAME}_env{ENV_NUM}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
